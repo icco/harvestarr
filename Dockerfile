@@ -1,4 +1,4 @@
-FROM ryakel/stream-harvestarr:v1.6.31
+FROM ryakel/stream-harvestarr:v1.7.0
 
 RUN apk upgrade --no-cache && apk add --no-cache deno
 RUN pip install --no-cache-dir -U yt-dlp yt-dlp-ejs
