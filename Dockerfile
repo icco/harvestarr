@@ -17,6 +17,12 @@ RUN pip install --no-cache-dir -U yt-dlp yt-dlp-ejs
 # 3. regex.site was assigned and never read — inert despite being documented.
 # 4. Unrecognised series/service config keys now warn instead of being
 #    silently ignored.
+# 5. matchtitle is no longer set at all. yt-dlp guards its title check with
+#    `if 'title' in info_dict` — key present, value possibly None — so one
+#    private video in a playlist raises TypeError, ignoreerrors swallows it,
+#    and extract_info returns None for the WHOLE playlist. That is why all 31
+#    Hot Ones episodes reported "No metadata returned". The check lives in the
+#    match_filter callable instead, which tolerates a null title.
 #
 # ryakel/stream-harvestarr#157. Necessarily carries #152 (the Shorts
 # match_filter) too, since (1) composes with that filter rather than replacing
@@ -34,5 +40,6 @@ RUN patch -p1 -d / --no-backup-if-mismatch < /tmp/0001-ytsearch-entry-selection.
   && grep -q 'COLLECTION_URL_RE' /app/stream_harvestarr.py \
   && grep -q 'match_filter_func' /app/stream_harvestarr.py \
   && ! grep -q "'match-filter'" /app/stream_harvestarr.py \
+  && ! grep -q "'matchtitle':" /app/stream_harvestarr.py \
   && python -c "import ast; ast.parse(open('/app/stream_harvestarr.py').read())" \
   && python -c "import ast; ast.parse(open('/app/utils.py').read())"
