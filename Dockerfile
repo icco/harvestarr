@@ -21,7 +21,12 @@ RUN pip install --no-cache-dir -U yt-dlp yt-dlp-ejs
 #    several — "Max Schaaf" and "Arto Saari" were matching Let It Kill You.
 #    A part-labelled upload can no longer satisfy an episode Sonarr models as
 #    whole; part 1 used to download and flip hasFile.
-# 6. matchtitle is no longer set at all. yt-dlp guards its title check with
+# 6. The search runs flat (extract_flat: in_playlist). A channel search
+#    carries the channel's playlists alongside its videos and yt-dlp recursed
+#    into all 13 of them, largest 1773 items, for every episode — enough to
+#    get rate-limited by YouTube. is_single_video() refused to return one
+#    anyway.
+# 7. matchtitle is no longer set at all. yt-dlp guards its title check with
 #    `if 'title' in info_dict` — key present, value possibly None — so one
 #    private video in a playlist raises TypeError, ignoreerrors swallows it,
 #    and extract_info returns None for the WHOLE playlist. That is why all 31
@@ -43,6 +48,7 @@ RUN patch -p1 -d / --no-backup-if-mismatch < /tmp/0001-ytsearch-entry-selection.
   && grep -q 'def warn_unknown_keys' /app/stream_harvestarr.py \
   && grep -q 'def has_part_marker' /app/stream_harvestarr.py \
   && grep -q 'MatchRules' /app/stream_harvestarr.py \
+  && grep -q "'extract_flat': 'in_playlist'" /app/stream_harvestarr.py \
   && grep -q 'COLLECTION_URL_RE' /app/stream_harvestarr.py \
   && grep -q 'match_filter_func' /app/stream_harvestarr.py \
   && ! grep -q "'match-filter'" /app/stream_harvestarr.py \
