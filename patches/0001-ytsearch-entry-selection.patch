@@ -15,7 +15,7 @@ index b56ef7b910f3..1a6e2c474514 100644
    - title: Ready Set Show
      url: https://www.youtube.com/playlist?list=PLTur7oukosPEwFTPJ1WeDvitauWzRiIhp
 diff --git a/app/stream_harvestarr.py b/app/stream_harvestarr.py
-index 9c31ebe68cfe..27c742c40466 100644
+index 9c31ebe68cfe..09cdfec29d32 100644
 --- a/app/stream_harvestarr.py
 +++ b/app/stream_harvestarr.py
 @@ -1,6 +1,8 @@
@@ -27,7 +27,7 @@ index 9c31ebe68cfe..27c742c40466 100644
  import os
  import sys
  import re
-@@ -32,6 +34,235 @@ SCANINTERVAL = 60
+@@ -32,6 +34,250 @@ SCANINTERVAL = 60
  # packaged for Alpine).  See issue #96.
  JS_RUNTIMES = {'deno': {'path': None}, 'node': {'path': None}}
  
@@ -97,6 +97,21 @@ index 9c31ebe68cfe..27c742c40466 100644
 +def has_part_marker(title):
 +    """True when a title advertises itself as one part of a longer whole."""
 +    return bool(title) and PART_RE.search(title) is not None
++
++
++def path_safe(name):
++    """Make a title safe to interpolate into an output template.
++
++    Only path separators are touched. They are the characters that change the
++    *shape* of the output rather than just the name: yt-dlp sanitizes what it
++    substitutes for its own fields, but a separator we bake into the template
++    ourselves is indistinguishable from one we meant, so it silently creates a
++    directory. Replacements match yt-dlp's own (U+29F8 / U+29F9), so a title
++    written by either route looks the same on disk.
++    """
++    if not name:
++        return name
++    return name.replace('/', '⧸').replace('\\', '⧹')
 +
 +
 +# The per-series rules that decide whether a candidate title is the episode.
@@ -263,7 +278,7 @@ index 9c31ebe68cfe..27c742c40466 100644
  
  class StreamHarvester(object):
  
-@@ -136,12 +367,14 @@ class StreamHarvester(object):
+@@ -136,12 +382,14 @@ class StreamHarvester(object):
          # Series Setup
          try:
              self.series = cfg["series"]
@@ -278,7 +293,7 @@ index 9c31ebe68cfe..27c742c40466 100644
              for svc in cfg.get('services', []):
                  self.services[svc['title']] = svc
              if self.services:
-@@ -320,10 +553,9 @@ class StreamHarvester(object):
+@@ -320,10 +568,9 @@ class StreamHarvester(object):
          # Copy series config so we never mutate the original YAML-parsed dict
          merged = dict(wnt)
  
@@ -292,7 +307,7 @@ index 9c31ebe68cfe..27c742c40466 100644
              if key not in merged and key in svc:
                  merged[key] = svc[key]
                  logger.debug('  Inherited {} from service "{}"'.format(key, service_name))
-@@ -391,6 +623,16 @@ class StreamHarvester(object):
+@@ -391,6 +638,16 @@ class StreamHarvester(object):
                          if 'site' in regex:
                              ser['site_regex_match'] = regex['site']['match']
                              ser['site_regex_replace'] = regex['site']['replace']
@@ -309,7 +324,7 @@ index 9c31ebe68cfe..27c742c40466 100644
                      if 'offset' in wnt:
                          ser['offset'] = wnt['offset']
                      if 'cookies_file' in wnt:
-@@ -519,13 +761,35 @@ class StreamHarvester(object):
+@@ -519,13 +776,35 @@ class StreamHarvester(object):
          else:
              return ytdlopts
  
@@ -348,7 +363,7 @@ index 9c31ebe68cfe..27c742c40466 100644
              'js_runtimes': JS_RUNTIMES,
          }
          if self.debug is True:
-@@ -540,7 +804,7 @@ class StreamHarvester(object):
+@@ -540,7 +819,7 @@ class StreamHarvester(object):
              logger.debug('yt-dlp opts configured for episode matching')
          return ytdlopts
  
@@ -357,7 +372,7 @@ index 9c31ebe68cfe..27c742c40466 100644
          try:
              with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                  result = ydl.extract_info(
-@@ -556,32 +820,44 @@ class StreamHarvester(object):
+@@ -556,32 +835,44 @@ class StreamHarvester(object):
              if result is None:
                  logger.error('No metadata returned for {}'.format(playlist))
                  return False, ''
@@ -427,7 +442,7 @@ index 9c31ebe68cfe..27c742c40466 100644
  
      def download(self, series, episodes):
          if len(series) != 0:
-@@ -600,8 +876,20 @@ class StreamHarvester(object):
+@@ -600,8 +891,20 @@ class StreamHarvester(object):
                              username = ser['username']
                          if 'password' in ser:
                              password = ser['password']
@@ -450,7 +465,31 @@ index 9c31ebe68cfe..27c742c40466 100644
                          if found:
                              logger.info("    {}: Found - {}:".format(e + 1, eps['title']))
                              season = self.format_season(eps['seasonNumber'])
-@@ -682,8 +970,15 @@ class StreamHarvester(object):
+@@ -610,13 +913,21 @@ class StreamHarvester(object):
+                                 'format': self.ytdl_format,
+                                 'quiet': True,
+                                 "merge_output_format": self.ytdl_merge_output_format,
++                                # Titles are interpolated into the *template*,
++                                # so yt-dlp reads any separator in them as a
++                                # real one and silently nests the download in a
++                                # directory. "James Kelch (Part 1/2)" landed in
++                                # ".../James Kelch (Part 1/2) WEBDL.mkv" — a
++                                # folder and a file. Only multi-part episodes
++                                # carry a slash, so this went unnoticed until
++                                # they were monitored.
+                                 'outtmpl': '{0}{1}/Season {2}/{3} - S{2}E{4} - {5} WEBDL.%(ext)s'.format(
+                                     self.root_folder,
+                                     ser['path'],
+                                     season,
+-                                    ser['title'],
++                                    path_safe(ser['title']),
+                                     episode,
+-                                    eps['title']
++                                    path_safe(eps['title'])
+                                 ),
+                                 'progress_hooks': [ytdl_hooks],
+                                 'noplaylist': True,
+@@ -682,8 +993,15 @@ class StreamHarvester(object):
                                  if self.download_delay > 0:
                                      logger.debug("      Waiting {} seconds before next download".format(self.download_delay))
                                      time.sleep(self.download_delay)

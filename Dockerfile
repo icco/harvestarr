@@ -30,7 +30,10 @@ RUN pip install --no-cache-dir -U yt-dlp yt-dlp-ejs
 #    the same handler logs with, so `e + 1` raised TypeError, escaped main()
 #    and restart-looped the container on any failed download — and the
 #    rate-limit branch logs before it sleeps, so backoff never ran.
-# 8. matchtitle is no longer set at all. yt-dlp guards its title check with
+# 8. A "/" in an episode title ("James Kelch (Part 1/2)") was interpolated
+#    into the output template and read as a real separator, so the download
+#    landed in a half-named subdirectory. Only multi-part titles carry one.
+# 9. matchtitle is no longer set at all. yt-dlp guards its title check with
 #    `if 'title' in info_dict` — key present, value possibly None — so one
 #    private video in a playlist raises TypeError, ignoreerrors swallows it,
 #    and extract_info returns None for the WHOLE playlist. That is why all 31
@@ -54,6 +57,7 @@ RUN patch -p1 -d / --no-backup-if-mismatch < /tmp/0001-ytsearch-entry-selection.
   && grep -q 'MatchRules' /app/stream_harvestarr.py \
   && grep -q "'extract_flat': 'in_playlist'" /app/stream_harvestarr.py \
   && grep -q 'except Exception as err' /app/stream_harvestarr.py \
+  && grep -q 'def path_safe' /app/stream_harvestarr.py \
   && grep -q 'COLLECTION_URL_RE' /app/stream_harvestarr.py \
   && grep -q 'match_filter_func' /app/stream_harvestarr.py \
   && ! grep -q "'match-filter'" /app/stream_harvestarr.py \
