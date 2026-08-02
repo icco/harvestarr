@@ -15,7 +15,7 @@ index b56ef7b910f3..1a6e2c474514 100644
    - title: Ready Set Show
      url: https://www.youtube.com/playlist?list=PLTur7oukosPEwFTPJ1WeDvitauWzRiIhp
 diff --git a/app/stream_harvestarr.py b/app/stream_harvestarr.py
-index 9c31ebe68cfe..3ad0df1cfd5f 100644
+index 9c31ebe68cfe..dafd2e970a58 100644
 --- a/app/stream_harvestarr.py
 +++ b/app/stream_harvestarr.py
 @@ -1,6 +1,8 @@
@@ -309,7 +309,7 @@ index 9c31ebe68cfe..3ad0df1cfd5f 100644
                      if 'offset' in wnt:
                          ser['offset'] = wnt['offset']
                      if 'cookies_file' in wnt:
-@@ -519,13 +761,19 @@ class StreamHarvester(object):
+@@ -519,13 +761,35 @@ class StreamHarvester(object):
          else:
              return ytdlopts
  
@@ -326,13 +326,29 @@ index 9c31ebe68cfe..3ad0df1cfd5f 100644
 -            'matchtitle': regextitle,
              'quiet': True,
 -            'match-filter': '!is_short & !url =~ /shorts/',  # Exclude YouTube Shorts
++            # Search for the episode without resolving anything. Two effects,
++            # both large:
++            #
++            #  - Nested collections are not walked. A channel-search result
++            #    carries the channel's playlists alongside its videos, and
++            #    yt-dlp recurses into every one of them: on the VICE search
++            #    that is 13 playlists, the largest 1773 items, walked again
++            #    for *every* episode. is_single_video() already refuses to
++            #    return one, so resolving them only ever cost requests.
++            #  - Candidates are matched on their flat title instead of being
++            #    fully extracted first.
++            #
++            # Nothing downstream needs a resolved entry: a flat one carries
++            # the title to match on and the canonical watch url, and
++            # download() re-extracts that url anyway (see issue #114).
++            'extract_flat': 'in_playlist',
 +            # The title check lives in the match_filter, never in yt-dlp's
 +            # 'matchtitle' option. See make_title_filter for why.
 +            'match_filter': make_title_filter(regextitle, rules, shorts_filter),
              'js_runtimes': JS_RUNTIMES,
          }
          if self.debug is True:
-@@ -540,7 +788,7 @@ class StreamHarvester(object):
+@@ -540,7 +804,7 @@ class StreamHarvester(object):
              logger.debug('yt-dlp opts configured for episode matching')
          return ytdlopts
  
@@ -341,7 +357,7 @@ index 9c31ebe68cfe..3ad0df1cfd5f 100644
          try:
              with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                  result = ydl.extract_info(
-@@ -556,32 +804,41 @@ class StreamHarvester(object):
+@@ -556,32 +820,44 @@ class StreamHarvester(object):
              if result is None:
                  logger.error('No metadata returned for {}'.format(playlist))
                  return False, ''
@@ -397,7 +413,10 @@ index 9c31ebe68cfe..3ad0df1cfd5f 100644
 +                # .get('url') == None even though extraction succeeded.
 +                # webpage_url is always set by the YouTube extractor directly;
 +                # the .get('url') fallback covers other extractors that only
-+                # populate url. See issue #114.
++                # populate url. See issue #114. Since the search runs flat
++                # (extract_flat), that fallback is now the normal path: a flat
++                # entry has no webpage_url, and its url is the canonical watch
++                # url rather than a media stream.
 +                video_url = entry.get('webpage_url') or entry.get('url')
 +                if not video_url or video_url == playlist:
 +                    continue
@@ -408,7 +427,7 @@ index 9c31ebe68cfe..3ad0df1cfd5f 100644
  
      def download(self, series, episodes):
          if len(series) != 0:
-@@ -600,8 +857,20 @@ class StreamHarvester(object):
+@@ -600,8 +876,20 @@ class StreamHarvester(object):
                              username = ser['username']
                          if 'password' in ser:
                              password = ser['password']
